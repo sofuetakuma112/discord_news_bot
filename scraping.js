@@ -3,27 +3,20 @@ const jsdom = require('jsdom');
 
 const { JSDOM } = jsdom;
 
-(async () => {
-  const res = await fetch('https://rss.itmedia.co.jp/rss/2.0/news_bursts.xml');
+exports.fetchRssURLs = (async () => {
+  const RSS_LIST_URL = 'https://corp.itmedia.co.jp/media/rss_list/'
+  const res = await fetch(RSS_LIST_URL);
   const html = await res.text();
   const dom = new JSDOM(html);
   const document = dom.window.document;
-  const nodes = document.querySelectorAll('item');
-  const news = [];
-  const elements = document.querySelector('item')
-  const HTMLLinkElement = elements.children
-  console.log(String(HTMLLinkElement[3].childNodes.length))
-  // for (const el of Array.from(HTMLLinkElement)) {
-  //   // url以外はこれでテキスト取れる
-  //   console.log(el.textContent)
-  // }
-  // Array.from(nodes).map((item) => {
-  //   news.push({
-  //     title: item.children[0].textContent.trim(),
-  //     url: item.children[1].tagName,
-  //     description: item.children[2].textContent,
-  //     pubDate: item.getElementsByTagName('pubDate').item(0).textContent.trim(),
-  //   });
-  // });
-  // console.log(news);
-})();
+  const nodes = document.querySelectorAll('.tablebordernone table > tbody > tr > td > a');
+  const rss_urls = [];
+  Array.from(nodes).map((item) => {
+    if (item.href.trim().slice(-3) === 'xml')
+    rss_urls.push({
+      name: item.textContent.trim(),
+      url: item.href.trim()
+    });
+  });
+  return rss_urls
+});
