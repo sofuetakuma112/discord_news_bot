@@ -116,7 +116,6 @@ const csvWriter = createCsvWriter({
 const allNews = [];
 const fetchAllLatestNews = async () => {
   const rss_urls = await scraping.fetchRssURLs();
-  // const slicedForTest = rss_urls.slice(0, 3);
   const promises = [];
   for (const xml of rss_urls) {
     promises.push(
@@ -172,7 +171,16 @@ const fetchAllLatestNews = async () => {
 
         feedparser.on('end', () => {
           console.log('pushed!');
-          allNews.push(...news);
+          // 新規追加するニュースに対してループを回す
+          for (const oneNews of news) {
+            // 追加済みのallNewsのニュースURLと一致していなければ追加
+            const result = allNews.every((alreadyAddedOneNews) => {
+              return alreadyAddedOneNews.url !== oneNews.url;
+            });
+            if (result) {
+              allNews.push(oneNews);
+            }
+          }
           resolve();
         });
       })
