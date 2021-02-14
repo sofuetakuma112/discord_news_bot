@@ -2,6 +2,8 @@
 node_modules
 /dist
 
+# 秘密鍵
+serviceAccountKey.json
 
 # local env files
 .env

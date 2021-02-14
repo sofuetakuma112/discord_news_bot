@@ -18,6 +18,8 @@
     "expres": "^0.0.5",
     "express": "^4.17.1",
     "feedparser": "^2.2.10",
+    "firebase": "^8.2.7",
+    "firebase-admin": "^9.5.0",
     "jsdom": "^16.4.0",
     "newsapi": "^2.4.1",
     "node-fetch": "^2.6.1",
