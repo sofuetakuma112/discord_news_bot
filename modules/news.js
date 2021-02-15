@@ -6,6 +6,7 @@ const createCsvWriter = require('csv-writer').createObjectCsvWriter;
 const scraping = require('../scraping');
 const fs = require('fs');
 const csv = require('csv');
+const { messageEventCallback } = require('./discord');
 
 const ChannelID = '809472448155746304';
 const milisecondsPerDay = 1000 * 60 * 60 * 24;
@@ -62,7 +63,7 @@ const distributionNews = async () => {
           } // else user.send('一致するニュースがありません');
         }
       })
-      .catch((err) => console.log('distributionNewsError', err.message));
+      .catch((err) => console.log('distributionNews() Error', err.message));
   });
 };
 
@@ -147,6 +148,8 @@ const fetchLatestNews = (lastSentURL = null) => {
 };
 
 const fetchAllLatestNews = async () => {
+  // messageイベントリスナーの削除
+  client.removeListener('message', () => console.log('message listener detached'))
   const csvWriter = createCsvWriter({
     path: 'allNews.csv',
     header: [
@@ -160,7 +163,7 @@ const fetchAllLatestNews = async () => {
   const allNews = [];
   const promises = [];
   const rss_urls = await scraping.fetchRssURLs();
-  for (const xml of rss_urls.slice(0, 3)) {
+  for (const xml of rss_urls) {
     let news = [];
     promises.push(
       new Promise(function (resolve, reject) {
@@ -227,12 +230,13 @@ const fetchAllLatestNews = async () => {
           loadedAllNews = data;
         })
       );
+      // messageイベントリスナの設定
+      client.on('message', (msg) => messageEventCallback(msg, loadedAllNews));
       distributionNews();
-      setTimeout(async () => {
+      setTimeout(() => {
         console.log('ニュースを最新情報に更新します');
-        await fetchAllLatestNews();
-        // 購読者へのニュース配信
-      }, milisecondsPerMinute * 15);
+        fetchAllLatestNews();
+      }, milisecondsPerHour);
     });
   });
 };

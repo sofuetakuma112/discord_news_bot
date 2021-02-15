@@ -2,6 +2,9 @@
 node_modules
 /dist
 
+# csvファイル
+allNews.csv
+
 # 秘密鍵
 serviceAccountKey.json
 
