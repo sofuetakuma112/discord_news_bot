@@ -13,6 +13,7 @@ exports.fetchRssURLs = (async () => {
   const rss_urls = [];
   Array.from(nodes).map((item) => {
     if (item.href.trim().slice(-3) === 'xml')
+    // console.log(item.textContent.trim(), item.href.trim())
     rss_urls.push({
       name: item.textContent.trim(),
       url: item.href.trim()
