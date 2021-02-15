@@ -2,12 +2,21 @@ const { db } = require('../plugins/firebase');
 const { client } = require('../plugins/discord');
 const fetch = require('node-fetch');
 const FeedParser = require('feedparser');
+const createCsvWriter = require('csv-writer').createObjectCsvWriter;
+const scraping = require('../scraping');
+const fs = require('fs');
+const csv = require('csv');
+
 const ChannelID = '809472448155746304';
 const milisecondsPerDay = 1000 * 60 * 60 * 24;
 const milisecondsPerHour = 1000 * 60 * 60;
 const milisecondsPerMinute = 1000 * 60;
 
-exports.distribututionNews = async (loadedAllNews) => {
+let loadedAllNews;
+
+const distributionNews = async () => {
+  console.log('called!');
+  // console.log(loadedAllNews.length);
   const subscribes = db.collection('subscribes');
   const snapshot = await subscribes.get();
   if (snapshot.empty) {
@@ -53,7 +62,7 @@ exports.distribututionNews = async (loadedAllNews) => {
           } // else user.send('一致するニュースがありません');
         }
       })
-      .catch((err) => console.log(err.message));
+      .catch((err) => console.log('distributionNewsError', err.message));
   });
 };
 
@@ -137,4 +146,97 @@ const fetchLatestNews = (lastSentURL = null) => {
   });
 };
 
+const fetchAllLatestNews = async () => {
+  const csvWriter = createCsvWriter({
+    path: 'allNews.csv',
+    header: [
+      { id: 'title', title: 'title' },
+      { id: 'description', title: 'description' },
+      { id: 'summary', title: 'summary' },
+      { id: 'pubDate', title: 'pubDate' },
+      { id: 'url', title: 'url' },
+    ],
+  });
+  const allNews = [];
+  const promises = [];
+  const rss_urls = await scraping.fetchRssURLs();
+  for (const xml of rss_urls.slice(0, 3)) {
+    let news = [];
+    promises.push(
+      new Promise(function (resolve, reject) {
+        const req = fetch(xml.url);
+        const feedparser = new FeedParser();
+        req.then(
+          function (res) {
+            if (res.status !== 200) {
+              throw new Error('Bad status code');
+            } else {
+              // res.bodyはストリームなのでpipeメソッドで連結できる
+              res.body.pipe(feedparser);
+            }
+          },
+          function (err) {
+            console.log('request err', err.message);
+          }
+        );
+        feedparser.on('error', function (error) {
+          console.log('error event', error.message, xml);
+        });
+        feedparser.on('readable', function () {
+          // feedparserはストリーム？
+          const stream = this; // thisはfeedpaeserを指し、ストリームである
+          let item;
+          while ((item = stream.read())) {
+            news.push({
+              title: item.title,
+              description: item.description,
+              summary: item.summary ? item.summary : '',
+              pubDate: item.pubDate,
+              url: item.link,
+            });
+          }
+          news.sort((a, b) => {
+            if (a.pubDate > b.pubDate) {
+              return -1;
+            } else {
+              return 1;
+            }
+          });
+        });
+        feedparser.on('end', () => {
+          console.log('pushed!');
+          // 新規追加するニュースに対してループを回す
+          for (const oneNews of news) {
+            // allNewsに追加済みのニュースURLと一致していなければ追加
+            const result = allNews.every((alreadyAddedOneNews) => {
+              return alreadyAddedOneNews.url !== oneNews.url;
+            });
+            if (result) allNews.push(oneNews);
+          }
+          resolve();
+        });
+      })
+    );
+  }
+  Promise.all(promises).then(() => {
+    console.log('beforeWrite');
+    csvWriter.writeRecords(allNews).then(() => {
+      console.log('The CSV file was written successfully');
+      fs.createReadStream('allNews.csv').pipe(
+        csv.parse({ columns: true }, function (err, data) {
+          loadedAllNews = data;
+        })
+      );
+      distributionNews();
+      setTimeout(async () => {
+        console.log('ニュースを最新情報に更新します');
+        await fetchAllLatestNews();
+        // 購読者へのニュース配信
+      }, milisecondsPerMinute * 15);
+    });
+  });
+};
+
 exports.fetchLatestNews = fetchLatestNews;
+exports.fetchAllLatestNews = fetchAllLatestNews;
+exports.distributionNews = distributionNews;

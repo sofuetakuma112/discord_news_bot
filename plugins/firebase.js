@@ -4,3 +4,4 @@ admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
 });
 exports.db = admin.firestore();
+exports.fieldValue = admin.firestore.FieldValue
