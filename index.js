@@ -1,21 +1,29 @@
 require('dotenv').config();
 const newsModules = require('./modules/news');
+
+const { client } = require('./plugins/discord');
+const { messageEventCallback } = require('./modules/discord')
+
+// 開発環境用
 const fs = require('fs');
 const csv = require('csv');
-const { client } = require('./plugins/discord');
 
 // テスト環境ではここからcsvファイルを読み込む
-// let loadedAllNews;
-// fs.createReadStream(__dirname + '/allNews.csv').pipe(
-//   csv.parse({ columns: true }, function (err, data) {
-//     loadedAllNews = data;
-//   })
-// );
+fs.createReadStream(__dirname + '/allNews.csv').pipe(
+  csv.parse({ columns: true }, function (err, data) {
+    globalThis.loadedAllNews = data;
+  })
+);
+
+// 開発環境用
+// messageイベントのコールバック関数はイベントが発行されるたびに呼び出される
+client.on('message', (msg) => messageEventCallback(msg, globalThis.loadedAllNews));
 
 client.on('ready', async () => {
   console.log('ready');
-  newsModules.fetchLatestNews()
-  await newsModules.fetchAllLatestNews();
+  setInterval(newsModules.fetchLatestNews, 1000 * 10)
+  // newsModules.fetchLatestNews()
+  // await newsModules.fetchAllLatestNews();
   // newsModules.distributionNews(); // テスト環境で購読配信の動作確認用
 });
 

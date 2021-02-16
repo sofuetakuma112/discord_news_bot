@@ -6,7 +6,14 @@ const messageEventCallback = async (msg, loadedAllNews) => {
   const destroySubscribe = /^!d$/; // 購読設定解除
   const currentSettings = /^!sk$/; // 現在の購読キーワードの確認
   const addKeywords = /^!a/;
-  const help = /^!help/;
+  const help = /^!help$/;
+  const here = /^!here$/;
+  if (globalThis.isUpdatingCSV) {
+    msg.channel.send(
+      '現在ニュースデータの更新作業をしているので暫くしてから再度コマンドを実行してください'
+    );
+    return;
+  }
   if (query.test(msg.content)) {
     // 最新のニュース取得
     let filteredNews;
@@ -155,7 +162,31 @@ const messageEventCallback = async (msg, loadedAllNews) => {
     msg.channel.send(
       '**!q キーワード** => キーワードと合致したニュースを取得します\n**!s キーワード** => キーワードと関連したニュースを定期的にDMで通知します\n**!sk** => 現在購読しているキーワードを確認します\n**!a キーワード** => 購読しているキーワードに追加します\n**!d** => 購読設定を解除します（設定しているキーワードもリセットされます）'
     );
+  } else if (here.test(msg.content)) {
+    const channelId = msg.channel.id;
+    const serverId = msg.guild.id;
+    const snapshot = await db
+      .collection('latestNewsSubscribe')
+      .where('serverId', '==', serverId)
+      .get();
+    if (!snapshot.empty) {
+      // 二回目以降の実行なので更新
+      snapshot.forEach(async (doc) => {
+        await db.collection('latestNewsSubscribe').doc(doc.id).update({
+          channelId,
+        });
+      });
+      // テキストチャンネルの更新を通知
+    } else {
+      // 初回
+      db.collection('latestNewsSubscribe').add({
+        serverId,
+        channelId,
+        lastSentURL: ''
+      });
+      msg.channel.send('このテキストチャンネルで最新ニュースの情報を配信します');
+    }
   }
 };
 
-exports.messageEventCallback = messageEventCallback
+exports.messageEventCallback = messageEventCallback;

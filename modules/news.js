@@ -6,18 +6,15 @@ const createCsvWriter = require('csv-writer').createObjectCsvWriter;
 const scraping = require('../scraping');
 const fs = require('fs');
 const csv = require('csv');
-const { messageEventCallback } = require('./discord');
 
-const ChannelID = '809472448155746304';
 const milisecondsPerDay = 1000 * 60 * 60 * 24;
 const milisecondsPerHour = 1000 * 60 * 60;
 const milisecondsPerMinute = 1000 * 60;
 
-let loadedAllNews;
+loadedAllNews = [];
+isUpdatingCSV = false;
 
 const distributionNews = async () => {
-  console.log('called!');
-  // console.log(loadedAllNews.length);
   const subscribes = db.collection('subscribes');
   const snapshot = await subscribes.get();
   if (snapshot.empty) {
@@ -67,22 +64,19 @@ const distributionNews = async () => {
   });
 };
 
-const fetchLatestNews = (lastSentURL = null) => {
+const fetchLatestNews = () => {
   const req = fetch('https://rss.itmedia.co.jp/rss/2.0/news_bursts.xml');
   const feedparser = new FeedParser();
   const news = [];
-  const channel = client.channels.cache.find((ch) => ch.id === ChannelID);
   req.then(
     function (res) {
       if (res.status !== 200) {
         throw new Error('Bad status code');
       } else {
-        // res.bodyはストリームなのでpipeメソッドで連結できる
         res.body.pipe(feedparser);
       }
     },
     function (err) {
-      // リクエストエラーをここに書く
       console.log('request err', err.message);
     }
   );
@@ -90,7 +84,6 @@ const fetchLatestNews = (lastSentURL = null) => {
     console.log('error event', error.message);
   });
   feedparser.on('readable', function () {
-    // feedparserはストリーム？
     const stream = this; // thisはfeedpaeserを指し、ストリームである
     let item;
     while ((item = stream.read())) {
@@ -103,53 +96,55 @@ const fetchLatestNews = (lastSentURL = null) => {
       });
     }
     news.sort((a, b) => {
-      if (a.pubDate > b.pubDate) {
-        return -1;
-      } else {
-        return 1;
-      }
+      return a.pubDate > b.pubDate ? -1 : 1;
     });
   });
-  feedparser.on('end', () => {
-    // デフォルトは50件取ってくる
-    const arrangedNews = [];
-    let slicedNews;
-    let sentURL;
-    if (!lastSentURL) {
-      // 一回目の実行
-      slicedNews = news.slice(0, 1);
-      sentURL = slicedNews[0].url;
-    } else {
-      // 2回目以降の配信
-      lastSentNews = news.find((oneNews) => oneNews.url === lastSentURL);
-      const lastSentNewsIndex = news.indexOf(lastSentNews);
-      // インデックスが0 => 前回送信したニュースから新規ニュースが追加されていない
-      if (lastSentNewsIndex !== 0) {
-        slicedNews = news.slice(0, lastSentNewsIndex);
-        sentURL = slicedNews[0].url;
-      } else {
-        console.log('新規ニュースが無いです');
-        setTimeout(() => {
-          fetchLatestNews(lastSentURL);
-        }, milisecondsPerMinute);
-        return;
-      }
+  feedparser.on('end', async () => {
+    const snapshot = await db.collection('latestNewsSubscribe').get();
+    if (!snapshot.empty) {
+      snapshot.forEach((doc) => {
+        const subscribeData = doc.data();
+        const arrangedNews = [];
+        let slicedNews;
+        let sentURL;
+        if (!subscribeData.lastSentURL) {
+          slicedNews = news.slice(0, 1);
+          sentURL = slicedNews[0].url;
+          db.collection('latestNewsSubscribe')
+            .doc(doc.id)
+            .update({ lastSentURL: sentURL });
+        } else {
+          lastSentNews = news.find(
+            (oneNews) => oneNews.url === subscribeData.lastSentURL
+          );
+          const lastSentNewsIndex = news.indexOf(lastSentNews);
+          if (lastSentNewsIndex !== 0) {
+            slicedNews = news.slice(0, lastSentNewsIndex);
+            sentURL = slicedNews[0].url;
+            db.collection('latestNewsSubscribe')
+              .doc(doc.id)
+              .update({ lastSentURL: sentURL });
+          } else {
+            console.log('新規ニュースが無いです');
+            return;
+          }
+        }
+        for (const oneNews of slicedNews) {
+          arrangedNews.push(`${oneNews.title}\n${oneNews.url}`);
+        }
+        // firestoreの情報からどの鯖のどのテキストチャンネルに送信するか決める
+        client.guilds.cache
+          .get(subscribeData.serverId)
+          .channels.cache.find((ch) => ch.id === subscribeData.channelId)
+          .send(arrangedNews.join('\n'));
+        // console.log(`${slicedNews.length}件の新規ニュースを取得しました`);
+      });
     }
-    // slicedNewsに初期化データ or 最新ニュースを入れている
-    for (const oneNews of slicedNews) {
-      arrangedNews.push(`${oneNews.title}\n${oneNews.url}`);
-    }
-    channel.send(arrangedNews.join('\n'));
-    console.log(`${slicedNews.length}件の新規ニュースを取得しました`);
-    setTimeout(() => {
-      fetchLatestNews(sentURL);
-    }, milisecondsPerMinute);
   });
 };
 
 const fetchAllLatestNews = async () => {
-  // messageイベントリスナーの削除
-  client.removeListener('message', () => console.log('message listener detached'))
+  isUpdatingCSV = true;
   const csvWriter = createCsvWriter({
     path: 'allNews.csv',
     header: [
@@ -198,13 +193,6 @@ const fetchAllLatestNews = async () => {
               url: item.link,
             });
           }
-          news.sort((a, b) => {
-            if (a.pubDate > b.pubDate) {
-              return -1;
-            } else {
-              return 1;
-            }
-          });
         });
         feedparser.on('end', () => {
           console.log('pushed!');
@@ -223,6 +211,9 @@ const fetchAllLatestNews = async () => {
   }
   Promise.all(promises).then(() => {
     console.log('beforeWrite');
+    allNews.sort((a, b) => {
+      return a.pubDate > b.pubDate ? -1 : 1;
+    });
     csvWriter.writeRecords(allNews).then(() => {
       console.log('The CSV file was written successfully');
       fs.createReadStream('allNews.csv').pipe(
@@ -230,8 +221,7 @@ const fetchAllLatestNews = async () => {
           loadedAllNews = data;
         })
       );
-      // messageイベントリスナの設定
-      client.on('message', (msg) => messageEventCallback(msg, loadedAllNews));
+      isUpdatingCSV = false;
       distributionNews();
       setTimeout(() => {
         console.log('ニュースを最新情報に更新します');
@@ -241,6 +231,8 @@ const fetchAllLatestNews = async () => {
   });
 };
 
-exports.fetchLatestNews = fetchLatestNews;
-exports.fetchAllLatestNews = fetchAllLatestNews;
-exports.distributionNews = distributionNews;
+module.exports = {
+  fetchAllLatestNews,
+  distributionNews,
+  fetchLatestNews,
+};
