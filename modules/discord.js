@@ -9,7 +9,9 @@ const messageEventCallback = async (msg, loadedAllNews) => {
   const help = /^!help$/;
   const here = /^!here$/;
   const stopFetchLatestNews = /^!stop$/;
-  if (globalThis.isUpdatingCSV) {
+  // 更新時にmessageイベントを発行するとisUpdatingCSV=trueによってコマンドは実行されないが、
+  // 何度もmessageイベントが発行される
+  if (globalThis.isUpdatingCSV && msg.content.startsWith("!")) {
     msg.channel.send(
       '現在ニュースデータの更新作業をしているので暫くしてから再度コマンドを実行してください'
     );

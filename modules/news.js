@@ -142,6 +142,7 @@ const fetchLatestNews = () => {
   });
 };
 
+// 一秒ごとにリクエストを送信する
 const fetchAllLatestNews = async () => {
   isUpdatingCSV = true;
   const csvWriter = createCsvWriter({
@@ -156,11 +157,18 @@ const fetchAllLatestNews = async () => {
   });
   const allNews = [];
   const promises = [];
-  const rss_urls = await scraping.fetchRssURLs();
+  const rss_urls = await scraping.fetchRssURLs(); // rss_urls.length = 110
+  await sleep(1000);
   for (const xml of rss_urls) {
+    process.stdout.write(
+      'csvファイル更新作業中... ' +
+        Math.floor((rss_urls.indexOf(xml) / rss_urls.length) * 10000) / 100 +
+        '%\r'
+    );
     let news = [];
+    await sleep(1000);
     promises.push(
-      new Promise(function (resolve, reject) {
+      new Promise((resolve, reject) => {
         const req = fetch(xml.url);
         const feedparser = new FeedParser();
         req.then(
@@ -194,7 +202,6 @@ const fetchAllLatestNews = async () => {
           }
         });
         feedparser.on('end', () => {
-          console.log('pushed!');
           // 新規追加するニュースに対してループを回す
           for (const oneNews of news) {
             // allNewsに追加済みのニュースURLと一致していなければ追加
@@ -209,7 +216,6 @@ const fetchAllLatestNews = async () => {
     );
   }
   Promise.all(promises).then(() => {
-    console.log('beforeWrite');
     allNews.sort((a, b) => {
       return a.pubDate > b.pubDate ? -1 : 1;
     });
@@ -227,6 +233,14 @@ const fetchAllLatestNews = async () => {
         fetchAllLatestNews();
       }, milisecondsPerHour);
     });
+  });
+};
+
+const sleep = (timeout) => {
+  return new Promise((resolve, reject) => {
+    setTimeout(() => {
+      resolve();
+    }, timeout);
   });
 };
 
