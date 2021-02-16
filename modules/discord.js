@@ -8,6 +8,7 @@ const messageEventCallback = async (msg, loadedAllNews) => {
   const addKeywords = /^!a/;
   const help = /^!help$/;
   const here = /^!here$/;
+  const stopFetchLatestNews = /^!stop$/;
   if (globalThis.isUpdatingCSV) {
     msg.channel.send(
       '現在ニュースデータの更新作業をしているので暫くしてから再度コマンドを実行してください'
@@ -76,36 +77,19 @@ const messageEventCallback = async (msg, loadedAllNews) => {
         );
       });
     }
-  } else if (subscribe.test(msg.content)) {
-    const trimedSearchWordsArray = msg.content
-      .replace(subscribe, '')
-      .trim()
-      .split(/\s+/);
+  } else if (stopFetchLatestNews.test(msg.content)) {
+    const serverId = msg.guild.id;
     const snapshot = await db
-      .collection('subscribes')
-      .where('uid', '==', msg.author.id)
+      .collection('latestNewsSubscribe')
+      .where('serverId', '==', serverId)
       .get();
-    if (snapshot.empty) {
-      // 一致するものはないから新規追加
-      db.collection('subscribes').add({
-        uid: msg.author.id,
-        keywords: trimedSearchWordsArray,
-      });
-      msg.channel.send(
-        `キーワード「${trimedSearchWordsArray.join(', ')}」で購読します`
-      );
-    } else {
+    if (!snapshot.empty) {
       snapshot.forEach((doc) => {
-        db.collection('subscribes').doc(doc.id).set({
-          uid: msg.author.id,
-          keywords: trimedSearchWordsArray,
-        });
-        msg.channel.send(
-          `購読するキーワードを「${trimedSearchWordsArray.join(
-            ', '
-          )}」に更新しました`
-        );
+        db.collection('latestNewsSubscribe').doc(doc.id).delete();
       });
+      msg.channel.send('最新ニュース情報の配信を停止しました');
+    } else {
+      msg.channel.send('最新ニュース情報の配信機能が有効になっていません');
     }
   } else if (destroySubscribe.test(msg.content)) {
     const snapshot = await db
@@ -177,14 +161,52 @@ const messageEventCallback = async (msg, loadedAllNews) => {
         });
       });
       // テキストチャンネルの更新を通知
+      msg.channel.send('最新ニュース配信のテキストチャンネルを更新しました');
     } else {
       // 初回
       db.collection('latestNewsSubscribe').add({
         serverId,
         channelId,
-        lastSentURL: ''
+        lastSentURL: '',
       });
-      msg.channel.send('このテキストチャンネルで最新ニュースの情報を配信します');
+      msg.channel.send(
+        'このテキストチャンネルで最新ニュースの情報を配信します'
+      );
+    }
+  } else if (subscribe.test(msg.content)) {
+    const trimedSearchWordsArray = msg.content
+      .replace(subscribe, '')
+      .trim()
+      .split(/\s+/);
+    if (!trimedSearchWordsArray[0]) {
+      msg.channel.send('キーワードを入力してください');
+      return;
+    }
+    const snapshot = await db
+      .collection('subscribes')
+      .where('uid', '==', msg.author.id)
+      .get();
+    if (snapshot.empty) {
+      // 一致するものはないから新規追加
+      db.collection('subscribes').add({
+        uid: msg.author.id,
+        keywords: trimedSearchWordsArray,
+      });
+      msg.channel.send(
+        `キーワード「${trimedSearchWordsArray.join(', ')}」で購読します`
+      );
+    } else {
+      snapshot.forEach((doc) => {
+        db.collection('subscribes').doc(doc.id).set({
+          uid: msg.author.id,
+          keywords: trimedSearchWordsArray,
+        });
+        msg.channel.send(
+          `購読するキーワードを「${trimedSearchWordsArray.join(
+            ', '
+          )}」に更新しました`
+        );
+      });
     }
   }
 };

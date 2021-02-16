@@ -125,7 +125,6 @@ const fetchLatestNews = () => {
               .doc(doc.id)
               .update({ lastSentURL: sentURL });
           } else {
-            console.log('新規ニュースが無いです');
             return;
           }
         }
