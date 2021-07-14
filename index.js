@@ -5,15 +5,15 @@ const { client } = require('./plugins/discord');
 const { messageEventCallback } = require('./modules/discord')
 
 // 開発環境用
-// const fs = require('fs');
-// const csv = require('csv');
+const fs = require('fs');
+const csv = require('csv');
 
 // テスト環境ではここからcsvファイルを読み込む
-// fs.createReadStream(__dirname + '/allNews.csv').pipe(
-//   csv.parse({ columns: true }, function (err, data) {
-//     globalThis.loadedAllNews = data;
-//   })
-// );
+fs.createReadStream(__dirname + '/allNews.csv').pipe(
+  csv.parse({ columns: true }, function (err, data) {
+    globalThis.loadedAllNews = data;
+  })
+);
 
 // messageイベントのコールバック関数はイベントが発行されるたびに呼び出される
 client.on('message', (msg) => messageEventCallback(msg, globalThis.loadedAllNews));
@@ -21,7 +21,7 @@ client.on('message', (msg) => messageEventCallback(msg, globalThis.loadedAllNews
 client.on('ready', async () => {
   console.log('ready');
   // setInterval(newsModules.fetchLatestNews, 1000 * 60 * 10)
-  await newsModules.fetchAllLatestNews();
+  // await newsModules.fetchAllLatestNews();
   // newsModules.distributionNews(); // テスト環境で購読配信の動作確認用
 });
 

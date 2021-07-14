@@ -5,6 +5,9 @@ node_modules
 # csvファイル
 allNews.csv
 
+# jsファイル
+test.js
+
 # 秘密鍵
 serviceAccountKey.json
 

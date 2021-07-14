@@ -10,19 +10,21 @@ const messageEventCallback = async (msg, loadedAllNews) => {
   const here = /^!here$/;
   const stopFetchLatestNews = /^!stop$/;
   // 更新時にmessageイベントを発行するとisUpdatingCSV=trueによってコマンドは実行されないが、
-  // 何度もmessageイベントが発行される
-  if (globalThis.isUpdatingCSV && msg.content.startsWith("!")) {
+  if (globalThis.isUpdatingCSV && msg.content.startsWith('!')) {
     msg.channel.send(
       '現在ニュースデータの更新作業をしているので暫くしてから再度コマンドを実行してください'
     );
     return;
   }
   if (query.test(msg.content)) {
-    // 最新のニュース取得
     let filteredNews;
-    const excludedQuery = msg.content.replace(query, '');
+    const excludedQuery = msg.content.replace(query, '').trim();
     const trimedSearchWordsArray = excludedQuery.split(/\s+/);
-    // 絞り込み検索
+    if (trimedSearchWordsArray[0].length === 0) {
+      msg.channel.send('キーワードを入力してください')
+      return;
+    }
+    // 完全一致検索
     filteredNews = loadedAllNews.filter((oneNews) => {
       const result = [];
       for (const word of trimedSearchWordsArray) {
@@ -35,12 +37,11 @@ const messageEventCallback = async (msg, loadedAllNews) => {
       }
       return result.every((bool) => bool);
     });
-    if (filteredNews.length !== 0 && excludedQuery.length !== 0) {
-      if (filteredNews.length < 30) {
+    if (filteredNews.length !== 0) {
+      if (filteredNews.length < 100) {
         const arrangedNews = [];
         for (const oneNews of filteredNews) {
-          const nextAddNews = `${oneNews.title}\n${oneNews.url}`;
-          arrangedNews.push(nextAddNews);
+          arrangedNews.push(`${oneNews.title}\n<${oneNews.url}>`);
         }
         if (arrangedNews.join('\n').length > 2000) {
           // 2000文字オーバーの場合、分割して送る
@@ -54,13 +55,50 @@ const messageEventCallback = async (msg, loadedAllNews) => {
               await msg.channel.send(chunk.join('\n'));
               chunk = [];
             }
+            if (chunk.length !== 0) msg.channel.send(chunk.join('\n'));
           }
         } else msg.channel.send(arrangedNews.join('\n'));
       } else
         msg.channel.send(
           `検索結果が多すぎます。\nキーワードを追加してより詳細に検索してください。\n(ヒット件数 : ${filteredNews.length}件)`
         );
-    } else msg.channel.send('一致するニュースがありません');
+    } else {
+      // あいまい検索
+      const searchResult = require('./search').search(
+        trimedSearchWordsArray[0]
+      );
+      if (searchResult.length !== 0) {
+        const arrangedNews = [];
+        for (const oneNews of searchResult) {
+          if (oneNews.score > 0.5) {
+            console.log(oneNews);
+            continue;
+          }
+          arrangedNews.push(`${oneNews.item.title}\n<${oneNews.item.url}>`);
+        }
+        // console.log('完全一致検索のヒット数 : ', filteredNews.length);
+        // console.log('検索ヒット件数 : ', searchResult.length);
+        // console.log(
+        //   '検索スコアに基づいたフィルタリング後の件数 : ',
+        //   arrangedNews.length
+        // );
+        if (arrangedNews.join('\n').length > 2000) {
+          let chunk = [];
+          for (const newsText of arrangedNews) {
+            if ((chunk.join('\n') + newsText).length < 2000) {
+              chunk.push(newsText);
+            } else {
+              await msg.channel.send(chunk.join('\n'));
+              chunk = [];
+            }
+          }
+          if (chunk.length !== 0) msg.channel.send(chunk.join('\n'));
+          return;
+        }
+        msg.channel.send(arrangedNews.join('\n'));
+        return;
+      } else msg.channel.send('一致するニュースがありませんでした。');
+    }
   } else if (currentSettings.test(msg.content)) {
     const snapshot = await db
       .collection('subscribes')
