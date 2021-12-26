@@ -71,7 +71,7 @@ const messageEventCallback = async (msg, loadedAllNews) => {
         const arrangedNews = [];
         for (const oneNews of searchResult) {
           if (oneNews.score > 0.5) {
-            console.log(oneNews);
+            // console.log(oneNews);
             continue;
           }
           arrangedNews.push(`${oneNews.item.title}\n<${oneNews.item.url}>`);
