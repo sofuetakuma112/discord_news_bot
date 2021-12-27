@@ -20,7 +20,7 @@ client.on('message', (msg) => messageEventCallback(msg, globalThis.loadedAllNews
 
 client.on('ready', async () => {
   console.log('ready');
-  // setInterval(newsModules.fetchLatestNews, 1000 * 60 * 10)
+  setInterval(newsModules.fetchLatestNews, 1000 * 60 * 60 * 24)
   // await newsModules.fetchAllLatestNews();
   // newsModules.distributionNews(); // テスト環境で購読配信の動作確認用
 });
